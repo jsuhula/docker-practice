@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  redis-queue:
+    image: redis:alpine
+    networks:
+      - red-backend
+  mysql-db:
+    image: mysql:8.0
+    platform: linux/x86_64
+    container_name: mysql-server
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: db_microservicios
+      MYSQL_USER: user_log
+      MYSQL_PASSWORD: userpassword
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - "9906:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - red-backend
+      
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api-usuarios
+      - api-transacciones
+    networks:
+      - red-publica
+      - red-backend
+
+  api-usuarios:
+    build: ./api-usuarios
+    volumes:
+      - ./logs_fisicos:/app/logs
+    networks:
+      - red-backend
+    depends_on:
+      - redis-queue
+
+  api-transacciones:
+    build: ./api-transacciones
+    volumes:
+      - ./logs_fisicos:/app/logs
+    networks: [red-backend]
+    depends_on: [redis-queue]
+
+  worker-transferencias:
+    build: ./worker-transferencias
+    volumes:
+      - ./logs_fisicos:/app/logs
+    networks: [red-backend]
+    depends_on: [redis-queue]
+
+  worker-bitacora:
+    build: ./worker-bitacora
+    volumes:
+      - ./logs_fisicos:/app/logs
+    environment:
+      - DB_HOST=mysql-db
+      - DB_USER=root
+      - DB_PASS=rootpassword
+      - DB_NAME=db_microservicios
+    networks: [red-backend]
+    depends_on: [redis-queue, mysql-db]
+
+volumes:
+  mysql_data:
+
+networks:
+  red-publica:
+  red-backend:
+    internal: true
