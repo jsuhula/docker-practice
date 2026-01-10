@@ -1,0 +1,129 @@
+services:
+
+  # Servicio de Traefik como gateway y balanceador de carga
+  gateway:
+    image: traefik:v2.10
+    user: root
+    environment:
+      - DOCKER_API_VERSION=1.41
+    ports:
+      - "80:8080"
+      - "8081:8081"
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+      - "--providers.docker.network=org_net"
+      - "--entrypoints.web.address=:8080"
+      - "--entrypoints.traefik.address=:8081"
+      - "--api.insecure=true"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.addRoutersLabels=true"
+      - "--metrics.prometheus.addServicesLabels=true"
+      - "--ping=true"
+      - "--metrics.prometheus=true"
+      - "--log.level=DEBUG"
+      - "--providers.docker.httpClientTimeout=300s"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - org_net
+
+  # Servicio de la aplicación RESTful
+  rest-app:
+    image: rest-app:latest
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/saludo || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.rest-app.rule=PathPrefix(`/rest-app`)"
+        - "traefik.http.routers.rest-app.entrypoints=web"
+        - "traefik.http.services.rest-app.loadbalancer.server.port=8080"
+        - "traefik.http.routers.rest-app.middlewares=rest-app-strip"
+        - "traefik.http.middlewares.rest-app-strip.stripprefix.prefixes=/rest-app"
+        - "traefik.docker.network=org_net"
+      update_config:
+        parallelism: 1
+        order: start-first
+        monitor: 1m
+        failure_action: rollback
+        max_failure_ratio: 0
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+        monitor: 1m
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources: 
+        limits:
+          cpus: '0.50'
+        reservations:
+          cpus: '0.10'
+    networks:
+      - org_net
+
+  #  Prometheus para monitorización y alertas
+  prometheus:
+    image: prom/prometheus:latest
+    configs: 
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+      - source: prometheus_alerts
+        target: /etc/prometheus/prometheus_alerts.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    networks:
+      - org_net
+
+  #  Alertmanager para gestión de alertas
+  alertmanager:
+    image: prom/alertmanager:latest
+    configs:
+      - source: alertmanager_config
+        target: /etc/alertmanager/alertmanager.yml
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    networks:
+      - org_net
+
+  # Servicio de Autoescalado
+  autoscaler:
+    build: ./autoscaler
+    image: autoscaler:latest
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - org_net
+
+# Definición de la red overlay
+networks:
+  org_net:
+    driver: overlay
+
+# Definición de las configuraciones
+configs:
+  prometheus_config:
+    file: ./prometheus.yml
+  prometheus_alerts:
+    file: ./prometheus_alerts.yml
+  alertmanager_config:
+    file: ./alertmanager.yml
