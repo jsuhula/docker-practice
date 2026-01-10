@@ -22,3 +22,41 @@ Thumbs.db
 # Ignore temporary files
 *.tmp
 *.swp
+
+# Ignore coverage reports
+coverage/
+
+# Ignore compiled files
+*.class
+*.obj
+*.exe
+*.dll
+*.object
+*.so
+
+# Ignore java build directories & files
+.classpath
+.project
+.settings/
+.gradle/
+target/
+bin/
+out/
+
+*.jar
+*.war
+*.ear
+
+# Ignore Python bytecode files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+
+# Ignore Ruby specific files
+*.gem
+.bundle/
+
+
