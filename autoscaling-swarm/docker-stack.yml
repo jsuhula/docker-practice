@@ -4,8 +4,6 @@ services:
   gateway:
     image: traefik:v2.10
     user: root
-    environment:
-      - DOCKER_API_VERSION=1.41
     ports:
       - "80:8080"
       - "8081:8081"
@@ -113,6 +111,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - org_net
+    environment:
+      - SERVICE_NAME=stack-autoscaler_rest-app
+      - REQ_PER_REPLICA_UP=20
+      - MAX_REPLICAS=10
+      - MIN_REPLICAS=2
+      - TIME_COOLDOWN=60
+      - SAFETY_MARGIN=1.15
 
 # Definición de la red overlay
 networks:
